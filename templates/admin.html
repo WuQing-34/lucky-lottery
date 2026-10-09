@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>抽奖管理后台</title>
+<style>
+  :root{
+    --brand:#e0322b; --brand-dark:#b71c1c; --gold:#f6b73c;
+    --ink:#1f2430; --ink-2:#5b6474; --ink-3:#8f97a6; --line:#e9ecf3; --bg:#f5f7fb;
+    --ok:#12a150; --warn:#b26a00; --danger:#c62828;
+    --radius:14px; --shadow:0 4px 16px rgba(31,36,48,.07);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px}
+  button,input,select,textarea{font:inherit;color:inherit}
+  .hidden{display:none !important}
+
+  /* 登录 */
+  #loginMask{position:fixed;inset:0;background:linear-gradient(160deg,#fdf7f0,#f5f7fb 60%);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  #loginMask .box{width:100%;max-width:380px;background:#fff;border-radius:20px;box-shadow:0 16px 44px rgba(31,36,48,.12);padding:30px 26px}
+  #loginMask h1{margin:0 0 6px;font-size:21px}
+  #loginMask p{margin:0 0 20px;color:var(--ink-3);font-size:13px}
+  .field{margin-bottom:14px}
+  label{display:block;font-size:12.5px;font-weight:700;color:#3a4152;margin-bottom:6px}
+  input[type=text],input[type=password],input[type=number],select,textarea{
+    width:100%;background:#f7f8fb;border:1.5px solid var(--line);border-radius:11px;padding:10px 12px;outline:none;transition:.15s}
+  input:focus,select:focus,textarea:focus{border-color:var(--brand);background:#fff;box-shadow:0 0 0 3px rgba(224,50,43,.09)}
+  textarea{resize:vertical;line-height:1.55}
+  .btn{border:0;border-radius:11px;padding:10px 16px;font-weight:700;cursor:pointer;transition:.15s;background:linear-gradient(180deg,#f0453c,#cf2a22);color:#fff;
+    box-shadow:0 4px 12px rgba(207,42,34,.25)}
+  .btn:hover:not(:disabled){transform:translateY(-1px)}
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .btn.block{display:block;width:100%;padding:12px;font-size:15px}
+  .btn.ghost{background:#fff;color:#4a5265;border:1.5px solid var(--line);box-shadow:none}
+  .btn.ghost:hover{background:#f7f8fb}
+  .btn.sm{padding:6px 12px;font-size:12.5px;border-radius:9px}
+  .btn.danger{background:#fff;color:var(--danger);border:1.5px solid #ffd7d3;box-shadow:none}
+  .btn.danger:hover{background:#fff1f0}
+  .msg{border-radius:11px;padding:10px 12px;font-size:13px;line-height:1.55;margin-top:12px}
+  .msg.err{background:#fff1f0;color:#b42318;border:1px solid #ffd7d3}
+  .msg.ok{background:#eafaf0;color:#0b7a3d;border:1px solid #c8f0d8}
+  .msg.warn{background:#fff8e6;color:#8a5a00;border:1px solid #ffe6ad}
+  .msg.info{background:#eef4ff;color:#1c4ed8;border:1px solid #d6e2ff}
+
+  /* 布局 */
+  header{background:#fff;border-bottom:1px solid var(--line);padding:0 22px;display:flex;align-items:center;gap:16px;height:58px;position:sticky;top:0;z-index:20}
+  header .logo{font-weight:800;font-size:16.5px;display:flex;align-items:center;gap:8px}
+  header .logo i{width:9px;height:9px;border-radius:50%;background:var(--brand);display:inline-block}
+  header .spacer{flex:1}
+  header .clock{color:var(--ink-3);font-size:12.5px}
+  main{max-width:1280px;margin:0 auto;padding:20px 22px 60px}
+  .tabs{display:flex;gap:6px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:5px;margin-bottom:18px;overflow-x:auto;box-shadow:var(--shadow)}
+  .tabs button{border:0;background:transparent;padding:9px 16px;border-radius:9px;cursor:pointer;font-weight:600;color:var(--ink-2);white-space:nowrap}
+  .tabs button.active{background:#fff1f0;color:var(--brand-dark)}
+  .panel{display:none}
+  .panel.active{display:block}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:16px}
+  .card h3{margin:0 0 4px;font-size:15.5px}
+  .card .desc{color:var(--ink-3);font-size:12.5px;margin:0 0 14px;line-height:1.6}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .row > *{min-width:0}
+  .grow{flex:1}
+  .grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+  .stat .n{font-size:24px;font-weight:800;letter-spacing:-.4px}
+  .stat .l{color:var(--ink-3);font-size:12.5px;margin-top:2px}
+  .stat.red .n{color:var(--brand-dark)}
+  .stat.gold .n{color:#b26a00}
+  .stat.green .n{color:var(--ok)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{background:#fafbfe;color:#4a5265;font-weight:700;font-size:12.5px;white-space:nowrap;position:sticky;top:0}
+  tbody tr:hover{background:#fafbfe}
+  .scroll{max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .tag.win{background:#ffe9e7;color:#c62828}
+  .tag.lose{background:#f1f3f8;color:#5b6474}
+  .tag.ok{background:#e6f7ee;color:#0b7a3d}
+  .tag.wait{background:#fff8e6;color:#8a5a00}
+  .muted{color:var(--ink-3)}
+  .empty{padding:40px 16px;text-align:center;color:var(--ink-3);font-size:13px}
+  .pager{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-top:12px;color:var(--ink-2);font-size:13px}
+  .mini{font-size:12.5px;color:var(--ink-3)}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:#f1f3f8;border-radius:999px;padding:3px 10px;font-size:12px;color:var(--ink-2)}
+  .prob-ok{color:var(--ok);font-weight:700}
+  .prob-over{color:var(--danger);font-weight:700}
+  .sw{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+  .sw input{width:16px;height:16px;accent-color:var(--brand)}
+  .filebox{border:1.5px dashed #d6dbe6;border-radius:12px;padding:14px;text-align:center;color:var(--ink-3);font-size:12.5px;background:#fafbfe;cursor:pointer}
+  .filebox:hover{border-color:var(--brand);color:var(--brand-dark)}
+  code{background:#f1f3f8;padding:1px 6px;border-radius:6px;font-size:12px}
+  td{word-break:break-word}
+  code{word-break:break-all}
+
+  /* ==================== 移动端适配 ==================== */
+  /* 平板：收窄边距 */
+  @media (max-width:1024px){
+    main{padding:16px 16px 50px}
+  }
+
+  /* 手机：表格改为卡片式，任何一列都不需要横向滚动 */
+  @media (max-width:768px){
+    html{-webkit-text-size-adjust:100%}
+
+    /* 顶部栏：活动名过长时截断，时钟让位给操作按钮 */
+    header{padding:0 12px;gap:10px;height:54px}
+    header .clock{display:none}
+    header .spacer{display:none}
+    header .logo{flex:1;min-width:0;font-size:15px}
+    header .logo span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    header .btn{padding:8px 12px;font-size:12.5px;min-height:36px}
+
+    main{padding:12px 12px calc(40px + env(safe-area-inset-bottom, 0px))}
+
+    /* 选项卡：可横滑，隐藏滚动条 */
+    .tabs{padding:4px;margin-bottom:12px;border-radius:11px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .tabs::-webkit-scrollbar{display:none}
+    .tabs button{padding:8px 14px;font-size:13.5px;border-radius:8px}
+
+    /* 统计卡：窄屏自动两列 */
+    .grid-stats{grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;margin-bottom:12px}
+    .stat{padding:11px 12px;border-radius:12px}
+    .stat .n{font-size:20px}
+    .stat .l{font-size:11.5px}
+
+    .card{padding:14px;border-radius:12px;margin-bottom:12px}
+    .card h3{font-size:15px}
+    .card .desc{font-size:12px;margin-bottom:12px}
+
+    /* 表单行：竖排，用 !important 压掉模板里的内联 flex 宽度 */
+    .row{gap:10px}
+    .row > *{flex:1 1 100% !important;width:100%}
+    .row > .btn{min-height:44px}
+
+    /* 输入控件字号必须 >=16px，否则 iOS Safari 聚焦时自动放大页面 */
+    input[type=text],input[type=password],input[type=number],select,textarea{font-size:16px;padding:11px 12px}
+
+    /* 触摸目标统一放大到 38px 以上 */
+    .btn{padding:11px 16px;font-size:14px;min-height:42px;border-radius:10px}
+    .btn.sm{padding:9px 14px;font-size:13px;min-height:38px}
+    .sw input{width:19px;height:19px}
+    label.sw{padding:3px 0}
+    .filebox{padding:18px 14px}
+
+    /* ---- 表格 -> 卡片 ---- */
+    .scroll{max-height:none !important;border:0;border-radius:0;overflow:visible}
+    table{font-size:14px}
+    thead{display:none}
+    table,tbody,tr,td{display:block;width:100%}
+    tbody tr{background:#fff;border:1px solid var(--line);border-radius:12px;
+      padding:12px 14px 9px;margin-bottom:10px;box-shadow:var(--shadow);position:relative}
+    tbody tr:hover{background:#fff}
+    td{border:0;padding:5px 0;display:flex;gap:10px;align-items:flex-start}
+    td::before{content:attr(data-label);flex:0 0 76px;color:var(--ink-3);
+      font-size:12.5px;font-weight:600;line-height:1.65;padding-top:1px}
+    td:empty{display:none}
+    /* 序号浮到卡片右上角 */
+    td[data-label="#"]{position:absolute;top:11px;right:14px;padding:0;width:auto;
+      display:block;color:#c3c9d4;font-size:12px;font-weight:700}
+    td[data-label="#"]::before{display:none}
+    /* 奖品表：输入框占满标签右侧的剩余宽度 */
+    #prizeBody td{align-items:center}
+    #prizeBody td::before{flex:0 0 66px}
+    #prizeBody td input{flex:1;min-width:0;width:auto}
+    #prizeBody td .btn{flex:0 0 auto;min-height:36px}
+
+    .pager{flex-wrap:wrap;gap:8px;justify-content:space-between}
+    .pager span{flex:1 1 100%;text-align:left}
+    .pager .btn{flex:1}
+
+    .empty{padding:28px 14px}
+    #loginMask{padding:16px}
+    #loginMask .box{padding:24px 20px;border-radius:17px}
+    #loginMask h1{font-size:19px}
+  }
+
+  /* 小屏手机（<=380px）再收一档 */
+  @media (max-width:380px){
+    header{padding:0 10px;gap:8px}
+    header .logo{font-size:14px}
+    header .btn{padding:7px 10px;font-size:12px}
+    main{padding:10px 10px calc(34px + env(safe-area-inset-bottom, 0px))}
+    .card{padding:12px}
+    .grid-stats{grid-template-columns:repeat(2,1fr)}
+    .stat .n{font-size:18px}
+    td::before{flex:0 0 68px;font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ 登录 ============ -->
+<div id="loginMask">
+  <div class="box">
+    <h1>抽奖管理后台</h1>
+    <p>请输入管理密码进入</p>
+    <div class="field">
+      <label for="pw">管理密码</label>
+      <input id="pw" type="password" placeholder="默认 admin888" autocomplete="current-password">
+    </div>
+    <button class="btn block" id="btnLogin">登 录</button>
+    <div class="msg err hidden" id="loginMsg"></div>
+  </div>
+</div>
+
+<!-- ============ 主体 ============ -->
+<div id="app" class="hidden">
+  <header>
+    <div class="logo"><i></i><span id="brandName">抽奖管理后台</span></div>
+    <div class="spacer"></div>
+    <span class="clock" id="clock"></span>
+    <button class="btn ghost sm" id="btnRefresh">刷新</button>
+    <button class="btn ghost sm" id="btnLogout">退出</button>
+  </header>
+
+  <main>
+    <div class="tabs">
+      <button data-tab="records" class="active">抽奖记录</button>
+      <button data-tab="prizes">奖品与概率</button>
+      <button data-tab="users">用户名单</button>
+      <button data-tab="settings">系统设置</button>
+    </div>
+
+    <!-- ---------- 抽奖记录 ---------- -->
+    <section class="panel active" id="panel-records">
+      <div class="grid-stats" id="statCards"></div>
+
+      <div class="card">
+        <h3>导出发货表</h3>
+        <p class="desc">
+          按下游系统要求的 11 列固定表头导出，UTF-8 BOM（Excel 双击直接打开不乱码）：<br>
+          A <b>学生ID*</b> · B <b>部门编号*</b> · C 标题 · D 业务订单编号 · E <b>物料信息*</b>（= 奖品编号 ×1）<br>
+          F 省 · G 市 · H 区/县 · I 详细地址 · J 收货人电话 · K 收货人姓名<br>
+          B / C / D 三列是固定值，在「系统设置」里改。E 列取该学员<b>抽中那个奖品</b>的物料编号，格式 <code>编号*1</code>。<br>
+          <b>测试ID 默认不导出</b>，需要核对时才勾下面的开关。
+        </p>
+        <label class="sw" style="margin-bottom:12px">
+          <input type="checkbox" id="shipIncTest"> 连测试ID一起导出（仅用于自检，正式交付不要勾）
+        </label>
+        <div class="row">
+          <button class="btn" id="btnExportShip">导出发货表</button>
+          <button class="btn ghost" id="btnExportShipAll">含未填收货信息的一起导出</button>
+        </div>
+        <div class="msg hidden" id="shipExpMsg"></div>
+      </div>
+
+      <div class="card">
+        <h3>中奖与库存分布</h3>
+        <p class="desc">按奖品统计已中出数量与剩余库存，用于核对库存消耗。测试ID已排除。</p>
+        <div id="prizeDist" class="muted mini">加载中…</div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div class="grow">
+            <label for="recKw">搜索</label>
+            <input id="recKw" type="text" placeholder="用户ID / 收货人 / 电话 / 奖品">
+          </div>
+          <div style="flex:0 0 140px">
+            <label for="recStatus">状态</label>
+            <select id="recStatus">
+              <option value="">全部</option>
+              <option value="win">仅中奖</option>
+              <option value="lose">仅未中奖</option>
+              <option value="pending">中奖待填收货</option>
+              <option value="shipped">已填收货信息</option>
+              <option value="nocode">中奖但缺物料编号</option>
+            </select>
+          </div>
+          <div style="flex:0 0 130px">
+            <label for="recScope">范围</label>
+            <select id="recScope">
+              <option value="all">全部</option>
+              <option value="real">仅正式ID</option>
+              <option value="test">仅测试ID</option>
+            </select>
+          </div>
+          <button class="btn" id="btnRecSearch">查询</button>
+          <button class="btn ghost" id="btnRecExport">导出明细 CSV</button>
+        </div>
+        <div class="scroll" style="margin-top:14px">
+          <table>
+            <thead><tr>
+              <th style="width:52px">#</th><th>用户ID</th><th style="width:70px">类型</th><th style="width:78px">结果</th>
+              <th>奖品</th>
+              <th style="width:150px">抽奖时间</th><th>收货人</th><th>联系电话</th><th>收货地址</th><th style="width:96px">收货状态</th>
+            </tr></thead>
+            <tbody id="recBody"></tbody>
+          </table>
+          <div class="empty hidden" id="recEmpty">暂无记录</div>
+        </div>
+        <div class="pager">
+          <span id="recInfo"></span>
+          <button class="btn ghost sm" id="recPrev">上一页</button>
+          <button class="btn ghost sm" id="recNext">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 奖品与概率 ---------- -->
+    <section class="panel" id="panel-prizes">
+      <div class="card">
+        <h3>奖品与概率</h3>
+        <p class="desc">
+          转盘上<b>每个奖品一个扇区</b>，抽中什么就是什么，用户不需要再挑。
+          概率之和不足 100% 的部分自动成为「谢谢参与」；超过 100% 时按比例压回 100%。<br>
+          <b>某个奖品发完时：它的扇区照旧保留在转盘上、名字照常显示，但概率静默归零 ——
+          怎么转都不会停在上面，页面上也不会有任何「已抢完」提示。</b>
+        </p>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span class="pill">奖品数：<b id="prizeCount">0</b></span>
+          <span class="pill">中奖概率合计：<b id="probSum">0</b>%</span>
+          <span class="pill">未中奖概率：<b id="probNoWin">0</b>%</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>奖品清单</h3>
+        <p class="desc">
+          每一行都是<b>一个独立奖品</b>：「物料编号」填真实编号，发货表 E 列就是 <code>编号*1</code>；
+          「库存」填 <code>-1</code> 表示不限量。名字为空的行会被拒绝保存。
+        </p>
+        <div class="msg warn hidden" id="prizeCodeWarn"></div>
+        <div class="scroll" style="max-height:none">
+          <table>
+            <thead><tr>
+              <th style="width:56px">序号</th><th>奖品名称</th>
+              <th style="width:150px">物料编号*</th>
+              <th style="width:112px">中奖概率%</th>
+              <th style="width:112px">库存(-1不限)</th>
+              <th style="width:80px">已发放</th>
+              <th style="width:76px">剩余</th>
+              <th style="width:70px">操作</th>
+            </tr></thead>
+            <tbody id="prizeBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:14px">
+          <button class="btn ghost sm" id="btnAddPrize">+ 添加奖品</button>
+        </div>
+        <div class="msg hidden" id="prizeMsg"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="btnSavePrizes">保存奖品设置</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 用户名单 ---------- -->
+    <section class="panel" id="panel-users">
+      <div class="card">
+        <h3>上传用户ID</h3>
+        <p class="desc">每行一个ID，也支持逗号/空格分隔，或直接选择 <code>.txt</code> / <code>.csv</code> 文件。重复ID会自动去重。</p>
+        <div class="field">
+          <textarea id="idsText" rows="7" placeholder="10001&#10;10002&#10;10003&#10;&#10;或：10001,10002,10003"></textarea>
+        </div>
+        <div class="row" style="margin-bottom:14px">
+          <label class="sw"><input type="radio" name="upmode" value="append" checked> 追加到现有名单</label>
+          <label class="sw"><input type="radio" name="upmode" value="replace"> 覆盖（先清空原名单）</label>
+        </div>
+        <label class="sw" style="margin-bottom:12px">
+          <input type="checkbox" id="upIsTest">
+          <b>标记为测试ID</b>（抽奖不消耗库存、不计入看板统计、发货表默认排除）
+        </label>
+        <div class="filebox" id="fileBox">点击选择 .txt / .csv 文件，内容会自动填入上方输入框</div>
+        <input type="file" id="fileInput" accept=".txt,.csv,text/plain" class="hidden">
+        <div class="msg hidden" id="idsMsg"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="btnUpload">导入名单</button>
+          <button class="btn ghost" id="btnUsersExport">导出当前名单</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>测试ID</h3>
+        <p class="desc">
+          测试ID 抽奖<b>不会消耗任何库存</b>，也不会出现在「导出发货表」里（除非你主动勾选包含）。
+          <br>要灌一批测试号，填好范围后点「生成并导入」即可 —— 例如 <code>001</code> 到 <code>101</code>，
+          会生成 <code>001, 002, … 101</code> 共 101 条。
+        </p>
+        <div class="row" style="max-width:760px">
+          <div style="flex:0 0 150px"><label for="tkStart">起始</label>
+            <input id="tkStart" type="text" placeholder="001"></div>
+          <div style="flex:0 0 40px;text-align:center;padding-bottom:11px">~</div>
+          <div style="flex:0 0 150px"><label for="tkEnd">结束</label>
+            <input id="tkEnd" type="text" placeholder="101"></div>
+          <div class="grow"><label for="tkTag">批次标记（可空）</label>
+            <input id="tkTag" type="text" maxlength="40" placeholder="例如 20261008 联调"></div>
+          <button class="btn" id="btnGenTest">生成并导入</button>
+        </div>
+        <div class="msg hidden" id="testMsg"></div>
+        <div class="row" style="margin-top:14px">
+          <span class="pill">当前：正式ID <b id="cntReal">0</b> 个 · 测试ID <b id="cntTest">0</b> 个</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div class="grow">
+            <label for="usrKw">搜索用户ID</label>
+            <input id="usrKw" type="text" placeholder="输入ID片段">
+          </div>
+          <div style="flex:0 0 160px">
+            <label for="usrScope">范围</label>
+            <select id="usrScope">
+              <option value="all">全部</option>
+              <option value="real">仅正式ID</option>
+              <option value="test">仅测试ID</option>
+            </select>
+          </div>
+          <button class="btn" id="btnUsrSearch">查询</button>
+        </div>
+        <div class="scroll" style="margin-top:14px;max-height:460px">
+          <table>
+            <thead><tr><th style="width:52px">#</th><th>用户ID</th><th style="width:82px">类型</th>
+              <th style="width:96px">是否已抽奖</th><th>奖品</th>
+              <th style="width:150px">抽奖时间</th><th style="width:96px">收货状态</th></tr></thead>
+            <tbody id="usrBody"></tbody>
+          </table>
+          <div class="empty hidden" id="usrEmpty">名单为空</div>
+        </div>
+        <div class="pager">
+          <span id="usrInfo"></span>
+          <button class="btn ghost sm" id="usrPrev">上一页</button>
+          <button class="btn ghost sm" id="usrNext">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 系统设置 ---------- -->
+    <section class="panel" id="panel-settings">
+      <div class="card">
+        <h3>活动名称</h3>
+        <p class="desc">显示在用户端标题和用户端首页。</p>
+        <div class="field" style="max-width:420px"><input id="setTitle" type="text" maxlength="40"></div>
+        <label class="sw" style="margin:6px 0 14px">
+          <input type="checkbox" id="setWhitelist"> 仅允许名单内用户抽奖（关闭后任意ID都能抽）
+        </label>
+        <hr style="border:0;border-top:1px dashed var(--line);margin:6px 0 16px">
+        <h3 style="font-size:15px">发货表固定字段</h3>
+        <p class="desc" style="margin-bottom:10px">导出「发货表」时，这三列填的固定值。</p>
+        <div class="row" style="max-width:960px">
+          <div class="grow"><label for="setDept">部门编号（B列）</label><input id="setDept" type="text" maxlength="60"></div>
+          <div class="grow"><label for="setOrderTitle">标题（C列）</label><input id="setOrderTitle" type="text" maxlength="60"></div>
+          <div class="grow"><label for="setOrderNo">业务订单编号（D列）</label><input id="setOrderNo" type="text" maxlength="60"></div>
+        </div>
+        <button class="btn" id="btnSaveSettings" style="margin-top:16px">保存设置</button>
+        <div class="msg hidden" id="setMsg"></div>
+      </div>
+
+      <div class="card">
+        <h3>修改管理密码</h3>
+        <p class="desc">密码以 PBKDF2 哈希保存在 <code>data/config.json</code>，不存明文。</p>
+        <div class="row" style="max-width:640px">
+          <div class="grow"><label for="pwOld">原密码</label><input id="pwOld" type="password"></div>
+          <div class="grow"><label for="pwNew">新密码（≥6位）</label><input id="pwNew" type="password"></div>
+        </div>
+        <div class="row" style="margin-top:14px"><button class="btn" id="btnChangePw">修改密码</button></div>
+        <div class="msg hidden" id="pwMsg"></div>
+      </div>
+
+      <div class="card">
+        <h3>数据与约束说明</h3>
+        <p class="desc" style="margin-bottom:0">
+          · 数据文件：<code id="dbPath">-</code>（SQLite，直接复制该文件即可备份/迁移）<br>
+          · 省/市/区县下拉数据：<code>regions.json</code>（内置全国 <b id="regionCount">-</b> 个省级行政区，离线可用，用户端只加载一次）<br>
+          · 同一用户ID <b>永久只能抽奖一次</b>：数据库对用户ID加了唯一约束，配合写事务锁，刷新页面、清缓存、换设备、并发点击都无法绕过。<br>
+          · <b>测试ID</b>：抽奖不消耗库存、不进统计、发货表默认排除，只用于联调。<br>
+          · <b>库存与并发</b>：抽奖全程走 `BEGIN IMMEDIATE` 写事务并加进程写锁，读库存和写记录之间不会被别的请求插入，
+          因此「总库存 N、同时来 N 个请求」也不会超发。<br>
+          · 后台 <b>不提供删除抽奖记录</b> 的功能，就是为了保证「一次即永久」不可撤回。真要重发机会，需手动改数据库，属于人工兜底。
+        </p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const state = { recPage:1, usrPage:1, size:50, recTotal:0, usrTotal:0 };
+
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function msg(id, text, type){
+    const el = $(id);
+    if(!text){ el.className='msg hidden'; el.textContent=''; return; }
+    el.className = 'msg ' + (type||'info');
+    el.innerHTML = text;
+  }
+  async function api(path, body, method){
+    const opt = { method: method || (body ? 'POST' : 'GET'), headers:{'Content-Type':'application/json'} };
+    if(body) opt.body = JSON.stringify(body);
+    const res = await fetch(path, opt);
+    let data = {};
+    try{ data = await res.json(); }catch(e){}
+    if(res.status === 401){ showLogin(); throw new Error(data.error || '请重新登录'); }
+    if(!res.ok || data.ok === false) throw new Error(data.error || ('请求失败('+res.status+')'));
+    return data;
+  }
+  // 省/市/区县 + 详细地址 拼一行（直辖市省市同名时去重）
+  function fullAddr(r){
+    if(!r) return '';
+    const parts = [r.province, r.city, r.district].filter((v, i, a) => v && a.indexOf(v) === i);
+    const head = parts.join(' ');
+    return (head ? head + ' ' : '') + (r.address || '');
+  }
+  function showLogin(){ $('loginMask').classList.remove('hidden'); $('app').classList.add('hidden'); }
+  function showApp(){ $('loginMask').classList.add('hidden'); $('app').classList.remove('hidden'); }
+
+  // ---------------- 登录 ----------------
+  async function login(){
+    const pw = $('pw').value;
+    if(!pw){ msg('loginMsg','请输入密码','err'); return; }
+    $('btnLogin').disabled = true;
+    try{
+      await api('/api/admin/login', {password: pw});
+      $('pw').value = '';
+      msg('loginMsg','');
+      showApp();
+      await loadAll();
+    }catch(e){ msg('loginMsg', esc(e.message), 'err'); }
+    finally{ $('btnLogin').disabled = false; }
+  }
+  async function logout(){ try{ await api('/api/admin/logout', {}); }catch(e){} showLogin(); }
+
+  $('btnLogin').addEventListener('click', login);
+  $('pw').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+  $('btnLogout').addEventListener('click', logout);
+  $('btnRefresh').addEventListener('click', () => loadAll(true));
+
+  // ---------------- Tab ----------------
+  document.querySelectorAll('.tabs button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + b.dataset.tab));
+      if(b.dataset.tab === 'records') loadRecords();
+      if(b.dataset.tab === 'users') loadUsers();
+      if(b.dataset.tab === 'prizes') loadPrizes();
+    });
+  });
+
+  // ---------------- 概览 ----------------
+  async function loadOverview(){
+    const d = await api('/api/admin/overview');
+    const s = d.stats;
+    $('brandName').textContent = (s.title || '抽奖管理后台');
+    $('clock').textContent = d.server_time;
+    const cards = [
+      ['正式参与人数', s.total_users, ''],
+      ['已抽奖', s.drawn, ''],
+      ['未抽奖', s.undrawn, 'green'],
+      ['中奖人次', s.won, 'red'],
+      ['未中奖', s.no_win, ''],
+      ['待填收货信息', s.pending_shipping, 'gold'],
+      ['奖品数', s.prize_count, ''],
+      ['测试ID', s.test_users, ''],
+    ];
+    $('statCards').innerHTML = cards.map(c =>
+      '<div class="stat ' + c[2] + '"><div class="n">' + c[1] + '</div><div class="l">' + esc(c[0]) + '</div></div>').join('');
+    let dist = '';
+    if(s.per_prize && s.per_prize.length){
+      dist += '<div style="margin-bottom:6px">已中出奖品：</div>' + s.per_prize.map(p =>
+        '<span class="pill" style="margin:0 8px 8px 0">' + esc(p.name) + ' <b>' + p.count + '</b> 人次</span>').join('');
+    }
+    if(s.prizes && s.prizes.length){
+      dist += '<div style="margin:10px 0 6px">各奖品库存：</div>' + s.prizes.map(p =>
+        '<span class="pill" style="margin:0 8px 8px 0">' + esc(p.name) + ' 已发 <b>' + p.used + '</b>' +
+        ' / 剩余 <b>' + esc(p.left) + '</b></span>').join('');
+    }
+    $('prizeDist').innerHTML = dist || '暂无中奖记录';
+    $('cntReal').textContent = s.total_users;
+    $('cntTest').textContent = s.test_users;
+  }
+
+  // ---------------- 抽奖记录 ----------------
+  async function loadRecords(){
+    const q = new URLSearchParams({ keyword: $('recKw').value.trim(), status: $('recStatus').value,
+      scope: $('recScope').value, page: state.recPage, size: state.size });
+    const d = await api('/api/admin/records?' + q.toString());
+    state.recTotal = d.total;
+    const body = $('recBody');
+    if(!d.items.length){
+      body.innerHTML = ''; $('recEmpty').classList.remove('hidden');
+    } else {
+      $('recEmpty').classList.add('hidden');
+      const start = (d.page - 1) * d.size;
+      body.innerHTML = d.items.map((r, i) => {
+        const won = Number(r.is_win) === 1;
+        const ship = won ? (r.shipping_done ? '<span class="tag ok">已填写</span>' : '<span class="tag wait">待填写</span>') : '<span class="muted">—</span>';
+        let prize = '<span class="muted">谢谢参与</span>';
+        if(won){
+          prize = '<b>' + esc(r.prize_name || '') + '</b>';
+          prize += (r.prize_code || '').trim()
+            ? ' <code>' + esc(r.prize_code) + '</code>'
+            : ' <span class="tag wait">缺编号</span>';
+        }
+        return '<tr>' +
+          '<td class="muted">' + (start + i + 1) + '</td>' +
+          '<td><b>' + esc(r.uid) + '</b></td>' +
+          '<td>' + (r.is_test ? '<span class="tag wait">测试</span>' : '<span class="tag lose">正式</span>') + '</td>' +
+          '<td>' + (won ? '<span class="tag win">中奖</span>' : '<span class="tag lose">未中奖</span>') + '</td>' +
+          '<td>' + prize + '</td>' +
+          '<td class="muted">' + esc(r.draw_at) + '</td>' +
+          '<td>' + (esc(r.name) || '<span class="muted">—</span>') + '</td>' +
+          '<td>' + (esc(r.phone) || '<span class="muted">—</span>') + '</td>' +
+          '<td>' + (esc(fullAddr(r)) || '<span class="muted">—</span>') + '</td>' +
+          '<td>' + ship + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+    $('recInfo').textContent = '共 ' + d.total + ' 条 · 第 ' + d.page + '/' + Math.max(1, Math.ceil(d.total / d.size)) + ' 页';
+    $('recPrev').disabled = d.page <= 1;
+    $('recNext').disabled = d.page >= Math.ceil(d.total / d.size);
+  }
+  $('btnRecSearch').addEventListener('click', () => { state.recPage = 1; loadRecords(); });
+  $('recKw').addEventListener('keydown', e => { if(e.key==='Enter'){ state.recPage=1; loadRecords(); } });
+  $('recStatus').addEventListener('change', () => { state.recPage = 1; loadRecords(); });
+  $('recScope').addEventListener('change', () => { state.recPage = 1; loadRecords(); });
+  $('recPrev').addEventListener('click', () => { if(state.recPage>1){ state.recPage--; loadRecords(); } });
+  $('recNext').addEventListener('click', () => { if(state.recPage < Math.ceil(state.recTotal/state.size)){ state.recPage++; loadRecords(); } });
+  // 走 fetch 而不是 location.href，才能读到服务端回的「有奖品没填物料编号」提示头
+  async function downloadCsv(url, fallback){
+    const res = await fetch(url);
+    if(res.status === 401){ showLogin(); throw new Error('登录已过期，请重新登录'); }
+    if(!res.ok) throw new Error('导出失败（HTTP ' + res.status + '）');
+    const noCode = parseInt(res.headers.get('X-No-Code-Count') || '0', 10) || 0;
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = /filename="([^"]+)"/.exec(cd);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = m ? m[1] : fallback;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+    return { noCode: noCode };
+  }
+  $('btnRecExport').addEventListener('click', async () => {
+    try{ await downloadCsv('/api/admin/records/export.csv?scope=' + $('recScope').value, 'records.csv'); }
+    catch(e){ alert(e.message); }
+  });
+  $('btnExportShip').addEventListener('click', () => exportShip('filled'));
+  $('btnExportShipAll').addEventListener('click', () => exportShip('win'));
+  async function exportShip(scope){
+    const ids = { filled:'btnExportShip', win:'btnExportShipAll' };
+    Object.values(ids).forEach(id => { $(id).disabled = true; });
+    msg('shipExpMsg','正在生成…','info');
+    try{
+      const inc = $('shipIncTest').checked ? 1 : 0;
+      const r = await downloadCsv('/api/admin/export/shipping.csv?scope=' + scope + '&include_test=' + inc, 'shipping.csv');
+      let t = scope === 'filled'
+        ? '发货表已导出（只含<b>已填收货信息</b>的中奖记录）。'
+        : '发货表已导出（含<b>未填收货信息</b>的中奖记录，这几行的收货信息为空）。';
+      t += inc ? '<br>⚠️ 本次<b>包含测试ID</b>，正式交付请重新导一次且不要勾选。' : '<br>测试ID已自动排除。';
+      if(r.noCode){
+        t += '<br>⚠️ 有 <b>' + r.noCode + '</b> 条记录的奖品没填「物料编号」，E 列（物料信息）是空的。'
+           + '请到「奖品与概率」补上编号并保存，再重新导出。';
+        msg('shipExpMsg', t, 'warn');
+      } else {
+        msg('shipExpMsg', t, inc ? 'warn' : 'ok');
+      }
+    }catch(e){ msg('shipExpMsg', esc(e.message), 'err'); }
+    finally{ Object.values(ids).forEach(id => { $(id).disabled = false; }); }
+  }
+
+  // ---------------- 奖品与概率 ----------------
+  let prizes = [];
+  async function loadPrizes(){
+    const d = await api('/api/admin/prizes');
+    prizes = d.items.map(p => ({...p}));
+    renderPrizes();
+  }
+  function renderPrizes(){
+    $('prizeBody').innerHTML = prizes.map((p, i) =>
+      '<tr>' +
+        '<td class="muted">' + (i+1) + '</td>' +
+        '<td><input type="text" value="' + esc(p.name) + '" data-f="name" data-i="' + i + '" maxlength="40" placeholder="奖品名称" style="padding:7px 10px"></td>' +
+        '<td><input type="text" value="' + esc(p.code || '') + '" data-f="code" data-i="' + i + '" maxlength="32" placeholder="必填" style="padding:7px 10px' + (p.code ? '' : ';border-color:#ffd7d3') + '"></td>' +
+        '<td><input type="number" value="' + (Number(p.prob) || 0) + '" data-f="prob" data-i="' + i + '" step="0.01" min="0" max="100" style="padding:7px 10px"></td>' +
+        '<td><input type="number" value="' + (p.stock == null ? -1 : p.stock) + '" data-f="stock" data-i="' + i + '" step="1" min="-1" style="padding:7px 10px"></td>' +
+        '<td class="muted">' + (p.used || 0) + '</td>' +
+        '<td class="muted">' + esc(p.left == null ? '-' : p.left) + '</td>' +
+        '<td><button class="btn danger sm" data-del="' + i + '">删除</button></td>' +
+      '</tr>').join('') || '<tr><td colspan="8" class="empty">还没有奖品，点下面「添加奖品」</td></tr>';
+    updateProbSum();
+    $('prizeBody').querySelectorAll('input[data-f]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const i = +inp.dataset.i, f = inp.dataset.f;
+        prizes[i][f] = inp.value;
+        if(f === 'code') inp.style.borderColor = inp.value.trim() ? '' : '#ffd7d3';
+        updateProbSum();
+      });
+    });
+    $('prizeBody').querySelectorAll('button[data-del]').forEach(b => {
+      b.addEventListener('click', () => {
+        const i = +b.dataset.del;
+        if(!confirm('确认删除奖品「' + prizes[i].name + '」？已中出的记录不会受影响。')) return;
+        prizes.splice(i, 1); renderPrizes();
+      });
+    });
+  }
+  function updateProbSum(){
+    // 物料编号缺失提示：编号直接决定发货表 E 列，缺了就导不出可用数据
+    const miss = prizes.filter(p => !String(p.code || '').trim());
+    const box = $('prizeCodeWarn');
+    if(miss.length){
+      box.className = 'msg warn';
+      box.innerHTML = '⚠️ 有 <b>' + miss.length + '</b> 个奖品还没填物料编号：'
+        + esc(miss.map(p => p.name || '(未命名)').join('、'))
+        + '。<br>导出发货表时这些奖品的 E 列（物料信息）会是空的，请补上后重新保存。';
+    } else {
+      box.className = 'msg warn hidden'; box.innerHTML = '';
+    }
+    let sum = 0;
+    prizes.forEach(p => { sum += Number(p.prob) || 0; });
+    const noWin = Math.max(0, 100 - sum);
+    $('prizeCount').textContent = prizes.length;
+    $('probSum').textContent = sum.toFixed(2);
+    $('probSum').className = sum > 100.0001 ? 'prob-over' : 'prob-ok';
+    $('probNoWin').textContent = noWin.toFixed(2);
+  }
+  $('btnAddPrize').addEventListener('click', () => {
+    prizes.push({ id:null, name:'', code:'', prob:0, stock:-1, used:0, left:'不限' });
+    renderPrizes();
+  });
+  $('btnSavePrizes').addEventListener('click', async () => {
+    $('btnSavePrizes').disabled = true;
+    try{
+      const d = await api('/api/admin/prizes', {
+        items: prizes.map(g => ({
+          id: g.id, name: g.name, code: g.code,
+          prob: Number(g.prob) || 0,
+          stock: (g.stock === '' || g.stock == null) ? -1 : Number(g.stock),
+        })),
+      });
+      let t = '保存成功：共 ' + d.saved + ' 个奖品，中奖概率合计 ' + d.prob_sum.toFixed(2)
+        + '%，未中奖概率 ' + d.no_win_prob.toFixed(2) + '%。用户端刷新即生效。';
+      if(d.no_code) t += '（还有 ' + d.no_code + ' 个奖品未填物料编号，发货表 E 列会为空）';
+      msg('prizeMsg', t, d.no_code ? 'warn' : 'ok');
+      await loadPrizes(); await loadOverview();
+    }catch(e){ msg('prizeMsg', esc(e.message), 'err'); }
+    finally{ $('btnSavePrizes').disabled = false; }
+  });
+
+  // ---------------- 用户名单 ----------------
+  async function loadUsers(){
+    const q = new URLSearchParams({ keyword: $('usrKw').value.trim(), scope: $('usrScope').value,
+      page: state.usrPage, size: state.size });
+    const d = await api('/api/admin/users?' + q.toString());
+    state.usrTotal = d.total;
+    const body = $('usrBody');
+    if(!d.items.length){
+      body.innerHTML = ''; $('usrEmpty').classList.remove('hidden');
+      $('usrEmpty').textContent = d.all_total === 0 ? '名单为空，请在上方导入用户ID' : '没有匹配的用户ID';
+    } else {
+      $('usrEmpty').classList.add('hidden');
+      const start = (d.page - 1) * d.size;
+      body.innerHTML = d.items.map((u, i) => {
+        const ship = u.drawn && u.is_win ? (u.shipping_done ? '<span class="tag ok">已填写</span>' : '<span class="tag wait">待填写</span>') : '<span class="muted">—</span>';
+        let prize = '<span class="muted">—</span>';
+        if(u.drawn){
+          prize = u.is_win
+            ? esc(u.prize_name || '中奖') + ((u.prize_code || '').trim() ? ' <code>' + esc(u.prize_code) + '</code>' : '')
+            : '<span class="muted">未中奖</span>';
+        }
+        return '<tr>' +
+          '<td class="muted">' + (start + i + 1) + '</td>' +
+          '<td><b>' + esc(u.uid) + '</b></td>' +
+          '<td>' + (u.is_test ? '<span class="tag wait">测试</span>' : '<span class="tag lose">正式</span>') + '</td>' +
+          '<td>' + (u.drawn ? '<span class="tag win">已抽奖</span>' : '<span class="tag lose">未抽奖</span>') + '</td>' +
+          '<td>' + prize + '</td>' +
+          '<td class="muted">' + esc(u.draw_at || '—') + '</td>' +
+          '<td>' + ship + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+    $('usrInfo').textContent = '共 ' + d.total + ' 个ID · 第 ' + d.page + '/' + Math.max(1, Math.ceil(d.total / d.size)) + ' 页';
+    $('cntReal').textContent = d.all_total - d.test_total;
+    $('cntTest').textContent = d.test_total;
+    $('usrPrev').disabled = d.page <= 1;
+    $('usrNext').disabled = d.page >= Math.ceil(d.total / d.size);
+  }
+  $('btnUsrSearch').addEventListener('click', () => { state.usrPage = 1; loadUsers(); });
+  $('usrKw').addEventListener('keydown', e => { if(e.key==='Enter'){ state.usrPage=1; loadUsers(); } });
+  $('usrScope').addEventListener('change', () => { state.usrPage = 1; loadUsers(); });
+  $('usrPrev').addEventListener('click', () => { if(state.usrPage>1){ state.usrPage--; loadUsers(); } });
+  $('usrNext').addEventListener('click', () => { if(state.usrPage < Math.ceil(state.usrTotal/state.size)){ state.usrPage++; loadUsers(); } });
+  $('btnUsersExport').addEventListener('click', () => { window.location.href = '/api/admin/users/export.csv'; });
+
+  // 生成 001 ~ 101 这样的连续编号（按位数补零），最多 2000 条，防止手滑填出百万条把库撑爆
+  function genRange(startRaw, endRaw){
+    const s = String(startRaw || '').trim(), e = String(endRaw || '').trim();
+    if(!/^\d+$/.test(s) || !/^\d+$/.test(e)) return { error: '起始和结束都必须是纯数字（例如 001 和 101）' };
+    const width = Math.max(s.length, e.length);
+    const a = parseInt(s, 10), b = parseInt(e, 10);
+    if(a > b) return { error: '起始不能大于结束' };
+    const n = b - a + 1;
+    if(n > 2000) return { error: '一次最多生成 2000 条，当前要生成 ' + n + ' 条' };
+    const out = [];
+    for(let i = a; i <= b; i++) out.push(String(i).padStart(width, '0'));
+    return { ids: out };
+  }
+  $('btnGenTest').addEventListener('click', async () => {
+    const r = genRange($('tkStart').value, $('tkEnd').value);
+    if(r.error){ msg('testMsg', esc(r.error), 'err'); return; }
+    if(!confirm('将导入 ' + r.ids.length + ' 个测试ID（' + r.ids[0] + ' ~ ' + r.ids[r.ids.length-1]
+      + '）。\n\n测试ID抽奖不消耗库存、不计入统计、发货表默认排除。继续？')) return;
+    $('btnGenTest').disabled = true;
+    try{
+      const d = await api('/api/admin/users', {
+        text: r.ids.join('\n'), mode: 'append', is_test: true, tag: $('tkTag').value.trim(),
+      });
+      msg('testMsg','导入完成：新增测试ID <b>' + d.added + '</b> 个，已存在 <b>' + d.skipped
+        + '</b> 个（标记已刷新为测试）。当前正式ID <b>' + (d.total - d.test_total)
+        + '</b> 个 / 测试ID <b>' + d.test_total + '</b> 个。','ok');
+      state.usrPage = 1;
+      await loadUsers(); await loadOverview();
+    }catch(e){ msg('testMsg', esc(e.message), 'err'); }
+    finally{ $('btnGenTest').disabled = false; }
+  });
+
+  $('fileBox').addEventListener('click', () => $('fileInput').click());
+  $('fileInput').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      $('idsText').value = r.result;
+      msg('idsMsg','已读取文件 <b>' + esc(f.name) + '</b>，确认无误后点「导入名单」。','ok');
+    };
+    r.readAsText(f, 'utf-8');
+    e.target.value = '';
+  });
+  $('btnUpload').addEventListener('click', async () => {
+    const text = $('idsText').value;
+    const isTest = $('upIsTest').checked;
+    if(!text.trim() && document.querySelector('input[name=upmode]:checked').value !== 'replace'){
+      msg('idsMsg','请先粘贴或选择用户ID','err'); return;
+    }
+    const mode = document.querySelector('input[name=upmode]:checked').value;
+    const kind = isTest ? '测试ID' : '正式ID';
+    if(mode === 'replace' && !confirm('覆盖模式会先清空现有的「' + kind + '」名单（已抽奖记录不受影响），确认继续？')) return;
+    $('btnUpload').disabled = true;
+    try{
+      const d = await api('/api/admin/users', {text: text, mode: mode, is_test: isTest});
+      msg('idsMsg','导入完成：新增 <b>' + d.added + '</b> 个 ' + kind + '，重复/已存在 <b>' + d.skipped
+        + '</b> 个，当前名单共 <b>' + d.total + '</b> 个ID（测试ID <b>' + d.test_total + '</b> 个）。','ok');
+      $('idsText').value = '';
+      state.usrPage = 1;
+      await loadUsers(); await loadOverview();
+    }catch(e){ msg('idsMsg', esc(e.message), 'err'); }
+    finally{ $('btnUpload').disabled = false; }
+  });
+
+  // ---------------- 设置 ----------------
+  async function loadSettings(){
+    const d = await api('/api/admin/settings');
+    $('setTitle').value = d.title || '';
+    $('setWhitelist').checked = !!d.whitelist_only;
+    $('setDept').value = d.dept_code || '';
+    $('setOrderTitle').value = d.order_title || '';
+    $('setOrderNo').value = d.order_no || '';
+    $('dbPath').textContent = d.db_path;
+    if(d.region_provinces) $('regionCount').textContent = d.region_provinces;
+  }
+  $('btnSaveSettings').addEventListener('click', async () => {
+    try{
+      const d = await api('/api/admin/settings', {
+        title: $('setTitle').value.trim(), whitelist_only: $('setWhitelist').checked,
+        dept_code: $('setDept').value.trim(),
+        order_title: $('setOrderTitle').value.trim(),
+        order_no: $('setOrderNo').value.trim(),
+      });
+      $('setDept').value = d.dept_code || ''; $('setOrderTitle').value = d.order_title || '';
+      $('setOrderNo').value = d.order_no || '';
+      msg('setMsg','设置已保存。','ok');
+      $('brandName').textContent = d.title;
+      await loadOverview();
+    }catch(e){ msg('setMsg', esc(e.message), 'err'); }
+  });
+  $('btnChangePw').addEventListener('click', async () => {
+    try{
+      const d = await api('/api/admin/password', {old: $('pwOld').value, new: $('pwNew').value});
+      msg('pwMsg', esc(d.message || '密码已修改'), 'ok');
+      $('pwOld').value = ''; $('pwNew').value = '';
+      setTimeout(showLogin, 1200);
+    }catch(e){ msg('pwMsg', esc(e.message), 'err'); }
+  });
+
+  // ---------------- 初始化 ----------------
+  async function loadAll(manual){
+    try{
+      await loadOverview();
+      await loadPrizes();
+      await loadRecords();
+      await loadUsers();
+      await loadSettings();
+      if(manual) msg('recInfo','');
+    }catch(e){ /* 未登录时静默，由 api() 兜底跳登录 */ }
+  }
+
+  // ---------------- 移动端：表格卡片化所需的 data-label ----------------
+  // 窄屏下表格会变成卡片（CSS 负责），每个单元格需要知道自己的字段名。
+  // 从表头自动回填，避免在四处渲染代码里各手写一遍、日后改表头忘了同步。
+  const SHORT_LABEL = { '中奖概率%':'概率%', '中奖概率(%)':'概率(%)', '库存(-1不限)':'库存',
+                        '是否已抽奖':'状态', '收货状态':'收货', '物料编号*':'物料编号' };
+  function decorateLabels(){
+    document.querySelectorAll('table').forEach(t => {
+      const labels = [...t.querySelectorAll('thead th')].map(th => {
+        const s = th.textContent.trim();
+        return SHORT_LABEL[s] || s;
+      });
+      t.querySelectorAll('tbody tr').forEach(tr => {
+        [...tr.children].forEach((td, i) => { td.dataset.label = labels[i] || ''; });
+      });
+    });
+  }
+  let decoTimer = null;
+  // 只观察 childList/subtree，不观察 attributes，所以回填 label 不会引发递归
+  new MutationObserver(() => {
+    clearTimeout(decoTimer);
+    decoTimer = setTimeout(decorateLabels, 40);
+  }).observe(document.body, { childList:true, subtree:true });
+  decorateLabels();
+
+  // 会话探测
+  api('/api/admin/overview').then(() => { showApp(); return loadAll(); }).catch(() => showLogin());
+})();
+</script>
+</body>
+</html>

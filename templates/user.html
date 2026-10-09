@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>幸运大转盘</title>
+<style>
+  :root{
+    --red:#e0322b; --red-dark:#b71c1c; --gold:#f6b73c; --gold-dark:#d49517;
+    --ink:#1f2430; --ink-2:#5b6474; --line:#eceff5; --bg:#fdf7f0;
+    --ok:#12a150; --shadow:0 10px 30px rgba(31,36,48,.10);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+  html{height:100%}
+  body{
+    margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);background:
+      radial-gradient(900px 500px at 50% -10%, #fff3d6 0%, rgba(255,243,214,0) 62%),
+      radial-gradient(700px 500px at 100% 100%, #ffe8e6 0%, rgba(255,232,230,0) 60%),
+      var(--bg);
+    /* 用 min-height 而不是 height：内容高过一屏时 body 能正常撑开，
+       否则 flex 居中会把顶部内容顶出可视区且滚不上去（手机上填收货信息必现） */
+    display:flex;align-items:center;justify-content:center;
+    padding:20px 16px 30px;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+    padding-top:calc(20px + env(safe-area-inset-top, 0px));
+    padding-bottom:calc(30px + env(safe-area-inset-bottom, 0px));
+    min-height:100%;min-height:100dvh;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{width:100%;max-width:440px}
+  .brand{text-align:center;margin-bottom:16px}
+  .brand h1{margin:0;font-size:26px;letter-spacing:1px;
+    background:linear-gradient(180deg,#f0453c,#c62828);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+  .brand p{margin:6px 0 0;color:var(--ink-2);font-size:13px}
+  .card{background:#fff;border-radius:20px;box-shadow:var(--shadow);padding:24px 22px;border:1px solid rgba(255,255,255,.8)}
+  .card + .card{margin-top:14px}
+  h2.step{margin:0 0 4px;font-size:19px}
+  .sub{color:var(--ink-2);font-size:13px;margin:0 0 18px;line-height:1.6}
+  label{display:block;font-size:13px;font-weight:600;margin:0 0 7px;color:#333a4a}
+  /* font-size 必须 >=16px，否则 iOS Safari 一聚焦输入框就自动放大整个页面 */
+  input,textarea{
+    width:100%;font:inherit;font-size:16px;color:var(--ink);background:#f7f8fb;border:1.5px solid var(--line);
+    border-radius:12px;padding:13px 14px;outline:none;transition:.18s;
+  }
+  input:focus,textarea:focus{border-color:var(--red);background:#fff;box-shadow:0 0 0 4px rgba(224,50,43,.09)}
+  textarea{resize:vertical;min-height:74px;line-height:1.5}
+  /* 省 / 市 / 区县 三级下拉：去掉系统默认箭头，换成统一的浅灰箭头 */
+  select{
+    width:100%;font:inherit;font-size:16px;color:var(--ink);border:1.5px solid var(--line);
+    border-radius:12px;padding:13px 34px 13px 14px;outline:none;transition:.18s;
+    appearance:none;-webkit-appearance:none;-moz-appearance:none;
+    background-color:#f7f8fb;background-repeat:no-repeat;background-position:right 13px center;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%235b6474' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+    text-overflow:ellipsis;cursor:pointer;
+  }
+  select:focus{border-color:var(--red);background-color:#fff;box-shadow:0 0 0 4px rgba(224,50,43,.09)}
+  /* 置灰用 class 而不是 :disabled 伪类：
+     某些渲染路径下「disabled -> enabled」不会触发样式重算，会残留成灰色（实测本机无头 Chrome 必现）。
+     class 切换是可靠的失效路径。 */
+  select.is-off{color:#a8aebb;background-color:#f1f3f8;cursor:not-allowed}
+  .row3{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3 #district{grid-column:1 / -1}
+  .req{color:var(--red);font-weight:700}
+  .btn{
+    display:block;width:100%;border:0;border-radius:14px;padding:14px 16px;font:inherit;font-size:16px;font-weight:700;
+    color:#fff;background:linear-gradient(180deg,#f0453c,#cf2a22);cursor:pointer;transition:.18s;
+    box-shadow:0 6px 16px rgba(207,42,34,.28);margin-top:18px;
+  }
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn.ghost{background:#fff;color:var(--ink-2);border:1.5px solid var(--line);box-shadow:none;font-weight:600}
+  .field + .field{margin-top:14px}
+  .msg{margin-top:14px;border-radius:12px;padding:11px 13px;font-size:13.5px;line-height:1.55;display:none}
+  .msg.show{display:block}
+  .msg.err{background:#fff1f0;color:#b42318;border:1px solid #ffd7d3}
+  .msg.warn{background:#fff8e6;color:#8a5a00;border:1px solid #ffe6ad}
+  .msg.ok{background:#eafaf0;color:#0b7a3d;border:1px solid #c8f0d8}
+
+  /* ---- 转盘 ---- */
+  .stage{position:relative;width:100%;aspect-ratio:1/1;margin:8px auto 0;max-width:340px;
+    -webkit-user-select:none;user-select:none}
+  #wheel{width:100%;height:100%;display:block;border-radius:50%;
+    box-shadow:0 14px 34px rgba(31,36,48,.16), inset 0 0 0 8px #fff, inset 0 0 0 12px var(--gold);
+    transition:transform 5.6s cubic-bezier(.13,.72,.12,1)}
+  /* 指针和中心按钮都按舞台宽度等比缩放，小屏手机才不会显得头重脚轻 */
+  .pin{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;z-index:5;
+    border-left:clamp(10px,4vw,15px) solid transparent;
+    border-right:clamp(10px,4vw,15px) solid transparent;
+    border-top:clamp(18px,6.9vw,26px) solid var(--red);
+    filter:drop-shadow(0 3px 5px rgba(0,0,0,.28))}
+  .hub{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:24.5%;height:24.5%;min-width:62px;min-height:62px;border-radius:50%;
+    border:clamp(4px,.9vw,5px) solid #fff;cursor:pointer;z-index:4;
+    background:linear-gradient(180deg,#ffd76b,#f0a01c);color:#7a3d00;font-weight:800;
+    font-size:clamp(14px,4.3vw,17px);
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1px;
+    box-shadow:0 8px 18px rgba(0,0,0,.22);transition:.15s;line-height:1.15;
+    -webkit-user-select:none;user-select:none;
+  }
+  .hub small{font-size:clamp(9px,2.5vw,10px);font-weight:600;opacity:.75}
+  .hub:disabled{cursor:not-allowed;filter:grayscale(.35) brightness(.94)}
+  .hint{text-align:center;color:var(--ink-2);font-size:12.5px;margin-top:16px;line-height:1.6}
+
+  /* ---- 图例 ---- */
+  .legend{margin-top:16px;border-top:1px dashed var(--line);padding-top:13px;display:none;flex-wrap:wrap;gap:7px 9px}
+  .legend.show{display:flex}
+  .legend .lg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);
+    background:#f7f8fb;border:1px solid var(--line);border-radius:999px;padding:4px 11px}
+  .legend .lg i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 10px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.10)}
+  /* 图例里只列真正中奖的主奖项；抱歉/未中奖不进图例 */
+  .legend .lg b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+
+  /* ---- 结果 ---- */
+  .result{text-align:center;padding:6px 0 2px}
+  .result .emoji{font-size:50px;line-height:1}
+  .result .prize{margin:12px 0 4px;font-size:23px;font-weight:800;color:var(--red-dark)}
+  .result .muted{color:var(--ink-2);font-size:13.5px;margin:6px 0 0}
+  .kv{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px;text-align:left}
+  .kv .row{display:flex;gap:10px;font-size:14px;padding:6px 0;line-height:1.55}
+  .kv .row .k{color:var(--ink-2);flex:0 0 76px}
+  .kv .row .v{font-weight:600;word-break:break-all;flex:1}
+  .badge{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;vertical-align:middle}
+  .badge.gray{background:#f1f3f8;color:var(--ink-2)}
+  .badge.red{background:#ffe9e7;color:#c62828}
+  .badge.green{background:#e6f7ee;color:#0b7a3d}
+  .center{text-align:center}
+  .hidden{display:none !important}
+  .footer{text-align:center;color:#a3aab8;font-size:11.5px;margin-top:18px}
+  .bar{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:18px;display:none}
+  .bar.show{display:block}
+  .bar i{display:block;height:100%;width:34%;border-radius:99px;background:linear-gradient(90deg,#f0453c,#f6b73c);animation:run 1.05s linear infinite}
+  @keyframes run{from{transform:translateX(-120%)}to{transform:translateX(320%)}}
+
+  /* ==================== 移动端适配 ==================== */
+  /* 鼠标设备才保留 hover 效果；触屏上 hover 会「粘」在元素上直到点别处 */
+  @media (hover:hover) and (pointer:fine){
+    .btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 9px 22px rgba(207,42,34,.34)}
+    .btn.ghost:hover{background:#f7f8fb;transform:none;box-shadow:none}
+    .hub:hover:not(:disabled){transform:translate(-50%,-50%) scale(1.06)}
+  }
+  /* 触屏给明确的按下反馈，否则点了不知道有没有反应 */
+  @media (hover:none){
+    .btn:active:not(:disabled){transform:scale(.98);box-shadow:0 3px 10px rgba(207,42,34,.22)}
+    .btn.ghost:active:not(:disabled){background:#eff1f7}
+    .hub:active:not(:disabled){transform:translate(-50%,-50%) scale(.94)}
+  }
+
+  /* 小屏手机（iPhone SE / 安卓小屏，<=380px） */
+  @media (max-width:380px){
+    body{
+      padding:14px 12px 24px;
+      padding-left:max(12px, env(safe-area-inset-left, 0px));
+      padding-right:max(12px, env(safe-area-inset-right, 0px));
+      padding-top:calc(14px + env(safe-area-inset-top, 0px));
+      padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px));
+    }
+    .wrap{max-width:100%}
+    .brand{margin-bottom:12px}
+    .brand h1{font-size:22px}
+    .brand p{font-size:12px}
+    .card{padding:18px 15px;border-radius:17px}
+    h2.step{font-size:17px}
+    .sub{font-size:12.5px;margin-bottom:15px}
+    label{font-size:12.5px}
+    input,textarea,select{padding:12px 13px;border-radius:11px}
+    select{padding-right:32px;background-position:right 11px center}
+    .row3{grid-template-columns:1fr;gap:8px}
+    .row3 #district{grid-column:auto}
+    .btn{padding:13px 14px;font-size:15.5px;border-radius:13px;margin-top:15px}
+    .field + .field{margin-top:12px}
+    .stage{max-width:100%}
+    .hint{font-size:12px}
+    .legend .lg{font-size:12px;padding:4px 9px}
+    .result .emoji{font-size:42px}
+    .result .prize{font-size:20px}
+    .kv .row{font-size:13.5px}
+    .kv .row .k{flex:0 0 62px}
+    .footer{font-size:11px}
+  }
+
+  /* 横屏手机：内容装不下一屏时不再垂直居中，避免顶部被顶出可视区 */
+  @media (max-height:520px){
+    body{align-items:flex-start;padding-top:calc(12px + env(safe-area-inset-top, 0px))}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <h1 id="pageTitle">幸运大转盘</h1>
+    <p>每位用户仅有一次抽奖机会，机会使用后不可恢复</p>
+  </div>
+
+  <!-- 1. 登录 -->
+  <section class="card" id="viewLogin">
+    <h2 class="step">输入用户ID开始</h2>
+    <p class="sub">请填写运营人员提供给你的用户ID，用于核验参与资格。</p>
+    <div class="field">
+      <label for="uid">用户ID</label>
+      <input id="uid" type="text" placeholder="例如：10086 或 U20260001" autocomplete="off" maxlength="64">
+    </div>
+    <button class="btn" id="btnLogin">确认并进入</button>
+    <div class="bar" id="loginBar"><i></i></div>
+    <div class="msg" id="loginMsg"></div>
+  </section>
+
+  <!-- 2. 转盘 -->
+  <section class="card hidden" id="viewWheel">
+    <h2 class="step" style="text-align:center">点击中间按钮开始抽奖</h2>
+    <p class="sub center" id="wheelUid" style="margin-bottom:6px"></p>
+    <div class="stage">
+      <div class="pin"></div>
+      <canvas id="wheel" width="680" height="680"></canvas>
+      <button class="hub" id="btnSpin">抽奖<small>点击</small></button>
+    </div>
+    <div class="hint">抽奖结果由服务器随机生成，概率按管理端配置<br>中奖后请立刻填写收货信息</div>
+    <div class="legend" id="wheelLegend"></div>
+    <div class="msg" id="wheelMsg"></div>
+  </section>
+
+  <!-- 3. 中奖：填写收货信息（抽中什么就是什么，不用再选） -->
+  <section class="card hidden" id="viewShip">
+    <div class="result">
+      <div class="emoji">🎉</div>
+      <div class="prize" id="shipPrize">恭喜中奖</div>
+      <p class="muted">恭喜你抽中上方奖品，请填写收货信息，运营人员会据此安排发货</p>
+    </div>
+
+    <div class="field" style="margin-top:18px">
+      <label>收货地区 <span class="req">*</span></label>
+      <div class="row3">
+        <select id="province" aria-label="省"><option value="">请选择省</option></select>
+        <select id="city" class="is-off" aria-label="市" disabled><option value="">请选择市</option></select>
+        <select id="district" class="is-off" aria-label="区县" disabled><option value="">请选择区/县</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="address">详细地址 <span class="req">*</span></label>
+      <textarea id="address" placeholder="街道、小区、楼栋、门牌号" maxlength="200"></textarea>
+    </div>
+    <div class="field">
+      <label for="name">收货人姓名 <span class="req">*</span></label>
+      <input id="name" type="text" placeholder="请输入真实姓名" autocomplete="off" maxlength="30">
+    </div>
+    <div class="field">
+      <label for="phone">联系电话 <span class="req">*</span></label>
+      <input id="phone" type="tel" placeholder="请输入手机号" autocomplete="off" maxlength="20">
+    </div>
+    <button class="btn" id="btnShip">提交收货信息</button>
+    <div class="msg" id="shipMsg"></div>
+  </section>
+
+  <!-- 4. 完成 -->
+  <section class="card hidden" id="viewDone">
+    <div class="result">
+      <div class="emoji" id="doneEmoji">✅</div>
+      <div class="prize" id="donePrize"></div>
+      <p class="muted" id="doneNote"></p>
+    </div>
+    <div class="kv" id="doneKv"></div>
+    <div class="msg ok show" style="margin-top:18px">抽奖已完成，此ID不可再次抽奖，感谢参与。</div>
+  </section>
+
+  <div class="footer" id="footer">本页面数据由管理端实时同步</div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const state = { uid:'', sectors:[], rotation:0, spinning:false, busy:false };
+
+  function show(view){
+    ['viewLogin','viewWheel','viewShip','viewDone'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  }
+  function msg(el, text, type){
+    const box = $(el);
+    box.style.background = ''; box.style.color = ''; box.style.border = '';
+    if(!text){ box.className = 'msg'; box.textContent=''; return; }
+    box.className = 'msg show ' + (type || 'err');
+    box.innerHTML = text;
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  async function api(path, body){
+    const opt = { method: body ? 'POST' : 'GET', headers:{'Content-Type':'application/json'} };
+    if(body) opt.body = JSON.stringify(body);
+    const res = await fetch(path, opt);
+    let data = {};
+    try { data = await res.json(); } catch(e){}
+    if(!res.ok || data.ok === false) throw new Error(data.error || ('请求失败('+res.status+')'));
+    return data;
+  }
+
+  // ------------------- 转盘绘制 -------------------
+  // 扇区底色 / 对应文字色（深浅搭配，保证可读）
+  const PALETTE = ['#e0322b','#fff4e0','#f6b73c','#ffffff','#ef6b3b','#fff4e0','#d92b26','#f7f1ff'];
+  const TEXTCOL = ['#ffffff','#8a4b00','#7a3d00','#c62828','#ffffff','#8a4b00','#ffffff','#5b3a8a'];
+  const FONTS   = c => '700 ' + c + 'px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+
+  const canvas = $('wheel');
+  const ctx = canvas.getContext('2d');
+  const SIZE = canvas.width, R = SIZE/2;
+
+  const RW       = R - 8;        // 扇区外半径
+  const TEXT_OUT = RW - 34;      // 文字靠外端所在半径
+  const TEXT_IN  = 98;           // 文字靠内端最小半径（避开中间按钮）
+  const AVAIL    = TEXT_OUT - TEXT_IN;
+  const MAX_FS   = 36;
+
+  /**
+   * 在「扇区角度」和「径向可用长度」双重约束下，为奖名挑一个放得下的字号。
+   * 放不下就依次退化为：去掉前缀的短名 -> 前 4 字 -> 前 3 字。
+   * 返回 {text, fs}；fs 太小说明这个扇区根本塞不下字，由调用方决定不画（名字看下方图例）。
+   */
+  function fitLabel(name, angleDeg){
+    const half  = angleDeg * Math.PI / 360;
+    const rMid  = (TEXT_OUT + TEXT_IN) / 2;
+    const byAng = 2 * rMid * Math.tan(half) * 1.15;   // 不越过相邻扇区
+    const raw   = String(name);
+    const segs  = raw.split(/[·・•\-—|/\s]+/).filter(Boolean);
+    const cands = [raw];
+    if(segs.length > 1) cands.push(segs[segs.length - 1]);
+    cands.push(raw.slice(0,4), raw.slice(0,3));
+    let fallback = { text: raw, fs: 0 };
+    for(const c of cands){
+      const n = [...c].length;
+      if(!n) continue;
+      const fs = Math.min(MAX_FS, byAng, AVAIL / n);
+      fallback = { text: c, fs };
+      if(fs >= 15) return fallback;
+    }
+    return fallback;
+  }
+
+  function drawWheel(sectors){
+    ctx.clearRect(0,0,SIZE,SIZE);
+    if(!sectors || !sectors.length) return;
+    let a0 = -Math.PI/2;
+    sectors.forEach((s, i) => {
+      const a1 = a0 + s.angle * Math.PI / 180;
+      ctx.beginPath();
+      ctx.moveTo(R,R);
+      ctx.arc(R,R,RW,a0,a1);
+      ctx.closePath();
+      ctx.fillStyle = PALETTE[i % PALETTE.length];
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255,255,255,.95)';
+      ctx.stroke();
+
+      // 文字沿半径排布；左侧扇区整体翻转 180°，避免出现倒字
+      const mid  = (a0 + a1) / 2;
+      const flip = Math.cos(mid) < 0;
+      const fit  = fitLabel(s.name, s.angle);
+      // fs 太小说明这个扇区放不下字（例如 1% 的极窄扇区），宁可不画，名字由下方图例说明
+      if(fit.fs >= 15){
+        ctx.save();
+        ctx.translate(R,R);
+        ctx.rotate(flip ? mid + Math.PI : mid);
+        ctx.textBaseline = 'middle';
+        ctx.font = FONTS(fit.fs);
+        ctx.fillStyle = TEXTCOL[i % TEXTCOL.length];
+        ctx.textAlign = flip ? 'left' : 'right';
+        ctx.fillText(fit.text, flip ? -TEXT_OUT : TEXT_OUT, 0);
+        ctx.restore();
+      }
+
+      s.start  = a0 * 180 / Math.PI;
+      s.end    = a1 * 180 / Math.PI;
+      s.center = (s.start + s.end) / 2;
+      a0 = a1;
+    });
+    // 外圈金边
+    ctx.beginPath();
+    ctx.arc(R,R,R-6,0,Math.PI*2);
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = 'rgba(246,183,60,.92)';
+    ctx.stroke();
+  }
+
+  function targetRotation(centerDeg, angleDeg){
+    const jitter = (Math.random() - 0.5) * angleDeg * 0.55;
+    const want = ((-90 - (centerDeg + jitter)) % 360 + 360) % 360;
+    const cur = ((state.rotation % 360) + 360) % 360;
+    const delta = ((want - cur) % 360 + 360) % 360;
+    return state.rotation + 360 * (5 + Math.floor(Math.random()*3)) + delta;
+  }
+
+  // ------------------- 登录 -------------------
+  async function doLogin(){
+    if(state.busy) return;
+    const uid = $('uid').value.trim();
+    if(!uid){ msg('loginMsg','请先填写用户ID','err'); return; }
+    state.busy = true;
+    $('btnLogin').disabled = true;
+    $('loginBar').classList.add('show');
+    msg('loginMsg','');
+    try{
+      const d = await api('/api/user/login', {uid: uid});
+      if(d.title) { $('pageTitle').textContent = d.title; document.title = d.title; }
+      state.uid = d.uid || uid;
+      try{ localStorage.setItem('lucky_uid', state.uid); }catch(e){}
+      if(d.status === 'not_found'){
+        msg('loginMsg', esc(d.message || '该ID无参与资格'), 'warn');
+      } else if(d.status === 'ok'){
+        state.sectors = d.sectors || [];
+        drawWheel(state.sectors);
+        $('wheelUid').innerHTML = '当前用户：<b>' + esc(state.uid) + '</b>';
+        msg('wheelMsg','');
+        $('btnSpin').disabled = false;
+        show('viewWheel');
+        renderLegend();
+      } else if(d.status === 'need_shipping'){
+        fillShipView(d.record);
+      } else {
+        renderRecord(d.record, 'already_drawn');
+      }
+    }catch(e){
+      msg('loginMsg', esc(e.message), 'err');
+    }finally{
+      state.busy = false;
+      $('btnLogin').disabled = false;
+      $('loginBar').classList.remove('show');
+    }
+  }
+
+  // 底部图例：颜色块和转盘扇区一一对应，窄到放不下字的扇区靠它说明
+  function renderLegend(){
+    const el = $('wheelLegend');
+    if(!state.sectors.length){ el.className = 'legend'; el.innerHTML=''; return; }
+    el.className = 'legend show';
+    el.innerHTML = state.sectors.map((s, i) =>
+      '<span class="lg"><i style="background:' + PALETTE[i % PALETTE.length] + '"></i>' +
+      esc(s.name) + ' <b>' + s.prob.toFixed(2) + '%</b></span>'
+    ).join('');
+  }
+
+  // ------------------- 抽奖 -------------------
+  async function doSpin(){
+    if(state.spinning || state.busy) return;
+    state.spinning = true;
+    $('btnSpin').disabled = true;
+    msg('wheelMsg','');
+    try{
+      const d = await api('/api/user/spin', {uid: state.uid});
+      if(d.status !== 'ok'){
+        // 已抽过 / 需要补填收货信息：直接中止，不转盘
+        state.spinning = false;
+        $('btnSpin').disabled = true;
+        if(d.status === 'need_shipping'){ fillShipView(d.record); }
+        else { renderRecord(d.record, d.status); }
+        return;
+      }
+      const sectors = d.sectors || state.sectors;
+      state.sectors = sectors;
+      drawWheel(sectors);
+      renderLegend();
+      const sec = sectors[d.sector_index] || sectors[sectors.length-1];
+      const to = targetRotation(sec.center || 0, sec.angle || 0);
+      state.rotation = to;
+      canvas.style.transform = 'rotate(' + to + 'deg)';
+
+      const done = () => {
+        canvas.removeEventListener('transitionend', done);
+        state.spinning = false;
+        if(d.is_win){ fillShipView(d.record); }
+        else { renderRecord(d.record, 'lose'); }
+      };
+      canvas.addEventListener('transitionend', done);
+      setTimeout(() => { if(state.spinning) done(); }, 6400); // 兜底，防止 transitionend 丢失
+    }catch(e){
+      state.spinning = false;
+      $('btnSpin').disabled = false;
+      msg('wheelMsg', esc(e.message), 'err');
+    }
+  }
+
+  // ------------------- 省 / 市 / 区县 三级联动 -------------------
+  // 数据来自 /api/regions（全国 34 省 / 366 市 / 3439 区县），带 ETag，浏览器只拉一次。
+  const REGION = { list: null, pending: null };
+
+  function loadRegions(){
+    if(REGION.list) return Promise.resolve(REGION.list);
+    if(REGION.pending) return REGION.pending;
+    REGION.pending = api('/api/regions').then(list => {
+      REGION.list = Array.isArray(list) ? list : [];
+      return REGION.list;
+    }).catch(err => { REGION.pending = null; throw err; });
+    return REGION.pending;
+  }
+
+  function fillSelect(sel, items, placeholder, keep){
+    const old = keep ? sel.value : '';
+    let html = '<option value="">' + placeholder + '</option>';
+    for(let i = 0; i < items.length; i++){
+      html += '<option value="' + esc(items[i].n) + '">' + esc(items[i].n) + '</option>';
+    }
+    sel.innerHTML = html;
+    sel.value = items.some(x => x.n === old) ? old : '';
+    sel.disabled = !items.length;
+    sel.classList.toggle('is-off', !items.length);   // 视觉上的置灰走 class，见上面的注释
+    return sel.value;
+  }
+
+  function provinceNode(){ 
+    if(!REGION.list) return null;
+    const v = $('province').value;
+    return v ? (REGION.list.find(p => p.n === v) || null) : null;
+  }
+  function cityNode(){
+    const p = provinceNode(); if(!p) return null;
+    const v = $('city').value;
+    return v ? (p.ch.find(c => c.n === v) || null) : null;
+  }
+
+  function syncCity(auto){
+    const p = provinceNode();
+    const cities = p ? p.ch : [];
+    fillSelect($('city'), cities, cities.length ? '请选择市' : '请先选省', !auto);
+    // 直辖市 / 只有一个市级选项时自动选中，少一次点击
+    if(cities.length === 1){ $('city').value = cities[0].n; $('city').disabled = true; }
+    syncDistrict(auto);
+  }
+
+  function syncDistrict(auto){
+    const c = cityNode();
+    const areas = c ? c.ch : [];
+    fillSelect($('district'), areas, areas.length ? '请选择区/县' : '请先选市', !auto);
+    // 只有唯一选项（如个别地区只有 1 个区）时自动选中
+    if(areas.length === 1) $('district').value = areas[0].n;
+  }
+
+  function initRegions(){
+    msg('shipMsg','正在加载地区数据…','warn');
+    loadRegions().then(() => {
+      if(!REGION.list.length){ msg('shipMsg','地区数据加载失败，请联系运营人员','err'); return; }
+      fillSelect($('province'), REGION.list, '请选择省', true);
+      syncCity(true);
+      msg('shipMsg','');
+    }).catch(() => {
+      msg('shipMsg','地区数据加载失败，请检查网络后刷新页面重试','err');
+    });
+  }
+
+  function fullAddr(rec){
+    const parts = [rec.province, rec.city, rec.district]
+      .filter((v, i, a) => v && a.indexOf(v) === i);   // 直辖市省市同名，去重
+    const head = parts.join(' ');
+    return (head ? head + ' ' : '') + (rec.address || '');
+  }
+
+  // ------------------- 收货信息 -------------------
+  function fillShipView(rec){
+    rec = rec || {};
+    $('shipPrize').textContent = rec.prize_name || '恭喜中奖';
+    msg('shipMsg','');
+    show('viewShip');
+    if(!REGION.list) initRegions();
+  }
+
+  async function doShip(){
+    if(state.busy) return;
+    const name = $('name').value.trim(), phone = $('phone').value.trim(), address = $('address').value.trim();
+    const province = $('province').value, city = $('city').value, district = $('district').value;
+    if(!province || !city || !district){ msg('shipMsg','请选择完整的 省 / 市 / 区县','err'); return; }
+    if(address.length < 3){ msg('shipMsg','请填写详细地址（街道门牌号）','err'); return; }
+    if(name.length < 2){ msg('shipMsg','请填写收货人姓名（至少2个字）','err'); return; }
+    if(phone.replace(/\D/g,'').length < 7){ msg('shipMsg','请填写正确的联系电话','err'); return; }
+    state.busy = true;
+    $('btnShip').disabled = true;
+    msg('shipMsg','正在提交…');
+    try{
+      const d = await api('/api/user/shipping',
+        {uid: state.uid, name, phone, address, province, city, district});
+      renderRecord(d.record, 'done');
+    }catch(e){
+      msg('shipMsg', esc(e.message), 'err');
+    }finally{
+      state.busy = false;
+      $('btnShip').disabled = false;
+    }
+  }
+
+  // ------------------- 结果页 -------------------
+  function renderRecord(rec, mode){
+    rec = rec || {};
+    const staleBtn = $('btnBackShip'); if(staleBtn) staleBtn.remove();
+    const won = Number(rec.is_win) === 1;
+    $('doneEmoji').textContent = won ? '🎁' : '🍀';
+    $('donePrize').textContent = won ? (rec.prize_name || '中奖') : '谢谢参与';
+    $('donePrize').style.color = won ? '#b71c1c' : '#5b6474';
+    let note = '';
+    if(!won) note = '很遗憾，本次未中奖。感谢参与！';
+    else if(mode === 'done') note = '收货信息已提交成功，我们会尽快安排发货。';
+    else if(rec.shipping_done) note = '你已中奖并提交收货信息，不能重复抽奖。';
+    else note = '你已中奖，请返回填写收货信息。';
+    $('doneNote').textContent = note;
+
+    let rows = '';
+    if(won){
+      rows += '<div class="row"><span class="k">用户ID</span><span class="v">' + esc(rec.uid) + '</span></div>';
+      rows += '<div class="row"><span class="k">奖品</span><span class="v">' + esc(rec.prize_name) +
+        (rec.prize_code ? ' <code>' + esc(rec.prize_code) + '</code>' : '') + '</span></div>';
+      rows += '<div class="row"><span class="k">抽奖时间</span><span class="v">' + esc(rec.draw_at || '-') + '</span></div>';
+      if(rec.shipping_done){
+        rows += '<div class="row"><span class="k">收货人</span><span class="v">' + esc(rec.name) + '</span></div>';
+        rows += '<div class="row"><span class="k">联系电话</span><span class="v">' + esc(rec.phone) + '</span></div>';
+        rows += '<div class="row"><span class="k">收货地址</span><span class="v">' + esc(fullAddr(rec)) + '</span></div>';
+      } else {
+        rows += '<div class="row"><span class="k">收货信息</span><span class="v"><span class="badge gray">尚未填写</span></span></div>';
+      }
+    } else {
+      rows += '<div class="row"><span class="k">用户ID</span><span class="v">' + esc(rec.uid) + '</span></div>';
+      rows += '<div class="row"><span class="k">抽奖时间</span><span class="v">' + esc(rec.draw_at || '-') + '</span></div>';
+    }
+    $('doneKv').innerHTML = rows;
+    show('viewDone');
+
+    if(won && !rec.shipping_done){
+      // 中奖但还没填收货信息，给个补填入口
+      $('doneKv').insertAdjacentHTML('afterend',
+        '<button class="btn" id="btnBackShip" style="margin-top:18px">去填写收货信息</button>');
+      const b = $('btnBackShip');
+      if(b) b.addEventListener('click', () => {
+        const el = $('btnBackShip'); if(el) el.remove();
+        fillShipView(rec);
+      }, {once:true});
+    }
+  }
+
+  // ------------------- 绑定 -------------------
+  $('btnLogin').addEventListener('click', doLogin);
+  $('uid').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
+  $('btnSpin').addEventListener('click', doSpin);
+  $('btnShip').addEventListener('click', doShip);
+  $('province').addEventListener('change', () => syncCity(false));
+  $('city').addEventListener('change', () => syncDistrict(false));
+
+  // 标题
+  api('/api/public/settings').then(d => {
+    if(d.title){ $('pageTitle').textContent = d.title; document.title = d.title; }
+  }).catch(()=>{});
+
+  // 刷新后自动带出上次的ID（不代表可以重抽，服务器仍会拦截）
+  let presetUid = '';
+  try{ presetUid = localStorage.getItem('lucky_uid') || ''; }catch(e){}
+  // 支持专属链接：https://<域名>/?uid=U10001 ，打开即自动登录
+  try{
+    const q = new URLSearchParams(location.search).get('uid');
+    if(q){ presetUid = q.trim(); }
+  }catch(e){}
+  if(presetUid){
+    $('uid').value = presetUid;
+    if(location.search.indexOf('uid=') >= 0) doLogin();
+  }
+})();
+</script>
+</body>
+</html>

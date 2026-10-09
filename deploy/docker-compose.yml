@@ -1,0 +1,21 @@
+# 幸运大转盘 —— 单容器部署（80 端口方案：访问 http://62.234.140.218/ 不带端口号）
+# 用法：sudo docker compose up -d --build
+services:
+  web:
+    build: .
+    image: lottery-web:3.0.0
+    container_name: lottery-web
+    restart: unless-stopped
+    ports:
+      - "80:8000"             # 公网 80 → 容器内 8000（80 已放行，地址最短）
+    environment:
+      TZ: Asia/Shanghai
+      # ---- 600 峰值承载相关（都有合理默认值，这里写出来方便按需调）----
+      WORKER_THREADS: "256"      # 工作线程数
+      LISTEN_BACKLOG: "1024"     # 内核 listen 队列
+      MAX_QUEUED: "4096"         # 超出线程数后的连接排队上限
+      DB_POOL_MAX: "64"          # 数据库热连接池上限
+      DB_POOL_PREWARM: "24"      # 启动预热的连接数
+    volumes:
+      - ./data:/app/data                     # 数据库与配置持久化（备份就打包这个目录）
+      - /etc/localtime:/etc/localtime:ro     # 让抽奖时间/发货时间用服务器本地时区（避免差 8 小时）
