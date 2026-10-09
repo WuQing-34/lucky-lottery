@@ -278,8 +278,12 @@
 
   // ------------------- 转盘绘制 -------------------
   // 扇区底色 / 对应文字色（深浅搭配，保证可读）
-  const PALETTE = ['#e0322b','#fff4e0','#f6b73c','#ffffff','#ef6b3b','#fff4e0','#d92b26','#f7f1ff'];
-  const TEXTCOL = ['#ffffff','#8a4b00','#7a3d00','#c62828','#ffffff','#8a4b00','#ffffff','#5b3a8a'];
+  // 奖品用彩色（按「第几个奖品」取色，相邻奖品不撞色）；「谢谢参与」统一浅灰。
+  // 这样哪怕盘上有十几块扇区也不会花，而且一眼能分清哪些是奖品、哪些是空门。
+  const PALETTE = ['#e0322b','#f6b73c','#d92b26','#ef9f27','#c62828','#f6b73c','#e0322b','#ef9f27'];
+  const TEXTCOL = ['#ffffff','#7a3d00','#ffffff','#7a3d00','#ffffff','#7a3d00','#ffffff','#7a3d00'];
+  const BLANK_BG = '#f2f4f8';
+  const BLANK_FG = '#9aa4b2';
   const FONTS   = c => '700 ' + c + 'px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 
   const canvas = $('wheel');
@@ -320,14 +324,16 @@
   function drawWheel(sectors){
     ctx.clearRect(0,0,SIZE,SIZE);
     if(!sectors || !sectors.length) return;
-    let a0 = -Math.PI/2;
-    sectors.forEach((s, i) => {
+    let a0 = -Math.PI/2, pi = 0;
+    sectors.forEach((s) => {
       const a1 = a0 + s.angle * Math.PI / 180;
+      const isWin = Number(s.is_win) === 1;
+      const ci = isWin ? (pi++) : 0;      // 奖品按序号取色；谢谢参与固定浅灰
       ctx.beginPath();
       ctx.moveTo(R,R);
       ctx.arc(R,R,RW,a0,a1);
       ctx.closePath();
-      ctx.fillStyle = PALETTE[i % PALETTE.length];
+      ctx.fillStyle = isWin ? PALETTE[ci % PALETTE.length] : BLANK_BG;
       ctx.fill();
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(255,255,255,.95)';
@@ -344,7 +350,7 @@
         ctx.rotate(flip ? mid + Math.PI : mid);
         ctx.textBaseline = 'middle';
         ctx.font = FONTS(fit.fs);
-        ctx.fillStyle = TEXTCOL[i % TEXTCOL.length];
+        ctx.fillStyle = isWin ? TEXTCOL[ci % TEXTCOL.length] : BLANK_FG;
         ctx.textAlign = flip ? 'left' : 'right';
         ctx.fillText(fit.text, flip ? -TEXT_OUT : TEXT_OUT, 0);
         ctx.restore();

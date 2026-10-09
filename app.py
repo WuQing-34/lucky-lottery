@@ -45,12 +45,16 @@ CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 DEFAULT_PASSWORD = "admin888"
 DEFAULT_TITLE = "幸运大转盘"
 NO_WIN_NAME = "谢谢参与"
-APP_VERSION = "3.0.0"
+APP_VERSION = "3.1.0"
 
-# 多奖品独立抽奖：每个奖品在 prizes 表里各有一份 概率 / 库存 / 物料编号，
-# 转盘上**每个奖品一个扇区**，抽中即定 —— 用户不需要（也不能）再挑。
-# 库存耗尽的奖品**不下架、不标注已抢完**，只是概率静默归零：永远抽不到，但盘上照旧。
-# 概率之和不足 100% 的部分自动成为「谢谢参与」；超过 100% 会按比例压回 100%。
+# 多奖品独立抽奖：每个奖品在 prizes 表里各有一份 库存 / 物料编号，
+# 转盘上**每个奖品一块扇区**、「谢谢参与」穿插其间，全部等分。
+#
+# ⚠️ 扇区大小**不代表中奖概率** —— 视觉与概率是解耦的：
+#    扇区只决定「停下来时指针指向谁」，真实中奖率由 dynamic_win_rate() 算：
+#        中奖率 = 剩余礼品数 ÷ 剩余未抽人数
+#    于是礼品会均匀铺满整场活动，既不会「前 20 个人把礼品抽光」，
+#    也基本不会到最后还剩一堆发不完。
 
 # 测试用户标记：只有显式标记为测试的用户，抽奖才不消耗库存、不进正式统计。
 # 刻意不按 ID 长度/前缀来判断 —— 正式 ID 也可能是 3 位，靠格式猜必然误伤。
@@ -437,51 +441,129 @@ def list_prizes(con):
     return out
 
 
-def build_sectors(con, is_test=False):
-    """转盘扇区：**每个奖品一个扇区** + 「谢谢参与」。
+def _no_win_sector():
+    return {"prize_id": None, "name": NO_WIN_NAME, "code": "", "is_win": 0,
+            "stock": -1, "used": 0, "left": -1, "live": False}
 
-    概率取自 prizes.prob；各奖品概率之和不足 100% 的部分给「谢谢参与」，
-    超过 100% 时按比例压回 100%（保证不会出现「总概率 120%」这种怪盘）。
 
-    库存耗尽的奖品**扇区照旧保留在盘上、名字照常显示**，只是概率静默归零，
-    于是永远抽不到 —— 刻意**不**给前端任何「已抢完」标记，用户看不出区别。
+def left_people_count(con, is_test=False):
+    """名单里**还没抽过奖**的人数（也就是「还会来抽的人」）。
 
-    is_test=True（测试ID）时完全不受库存限制，正式库存抽光了也照样能中，方便持续联调。
+    用 LEFT JOIN 数「没有记录的用户」，而不是「总人数 − 记录数」——
+    后者在名单被换过、或库里存着名单外 ID 的记录时会算歪（甚至算成负数），
+    进而把中奖率错误地压成 0。
     """
-    used = prize_stock_used(con)
-    win = []
-    for r in con.execute("SELECT * FROM prizes ORDER BY sort, id").fetchall():
-        stock = to_int(r["stock"], -1)
-        prob = max(0.0, float(r["prob"] or 0))
-        if (not is_test) and stock >= 0 and used.get(r["id"], 0) >= stock:
-            prob = 0.0                       # 发完了：留在盘上，但抽不到
-        win.append({"prize_id": r["id"], "name": r["name"], "code": (r["code"] or ""),
-                    "prob": prob, "is_win": 1, "stock": stock,
-                    "used": used.get(r["id"], 0)})
+    return con.execute(
+        "SELECT COUNT(*) c FROM users u LEFT JOIN records r ON r.uid = u.uid "
+        "WHERE COALESCE(u.is_test,0)=? AND r.id IS NULL",
+        (1 if is_test else 0,)).fetchone()["c"]
 
-    if not win:
-        # 一个奖品都没配：整盘都是谢谢参与
-        sectors = [{"prize_id": None, "name": NO_WIN_NAME, "code": "", "prob": 100.0,
-                    "is_win": 0, "stock": -1, "used": 0}]
+
+def dynamic_win_rate(con, is_test=False):
+    """动态中奖率 = 剩余礼品数 ÷ 剩余未抽人数。
+
+    这是「扇区与概率解耦」方案的核心：把有限的礼品**摊平**到整场活动里 ——
+      · 前面运气好、中得多 → 剩余礼品变少，概率自动回落；
+      · 前面没中出去 → 概率自动抬升。
+    于是既不会「前 20 个人把礼品抽光、后面 480 人白参与」，
+    也基本不会出现到最后还剩一堆发不完。
+
+    测试ID：分母用测试号人数、分子用**配置的总库存**（测试抽奖不消耗正式库存，
+    所以对它来说永远有货），方便反复联调。
+    """
+    prizes = list_prizes(con)
+    left_people = left_people_count(con, is_test=is_test)
+
+    if is_test:
+        total = sum(max(0, p["stock"]) for p in prizes if p["stock"] >= 0)
+        if total <= 0:
+            return min(1.0, float(setting(con, "fixed_win_prob", "10") or 10) / 100.0)
+        if left_people <= 0:
+            return 0.0
+        return min(1.0, float(total) / left_people)
+
+    left = sum(max(0, p["stock"] - p["used"]) for p in prizes if p["stock"] >= 0)
+    if left <= 0:
+        # 没有「有限库存」的奖品了：可能全是不限量，也可能确实都发完了。
+        # 前者退回固定概率（否则中奖率会变成 0，等于抽不到），后者就是真的没得发了。
+        if any(p["stock"] < 0 for p in prizes):
+            return min(1.0, float(setting(con, "fixed_win_prob", "10") or 10) / 100.0)
+        return 0.0
+    if left_people <= 0:
+        return 0.0                # 名单里的人都抽完了，不再发放
+    return min(1.0, float(left) / left_people)
+
+
+def pick_prize(con, is_test=False):
+    """中奖后挑一件礼品：**按剩余库存加权**。
+
+    剩得多的更容易被抽中，各礼品于是自动趋于同时发完，
+    不会出现「A 早就发完了、B 还堆着没人要」。
+
+    测试ID（is_test）不受库存限制：某个奖品即使已经发完，它照样抽得到
+    （权重退回该奖品的配置库存），这样正式库存清空后还能继续联调。
+    """
+    pool = []
+    for p in list_prizes(con):
+        if is_test:
+            w = float(p["stock"]) if p["stock"] > 0 else 1.0
+        elif p["stock"] < 0:
+            w = 1.0                     # 不限量
+        else:
+            w = float(p["left"])
+        if w > 0:
+            pool.append((p, w))
+    if not pool:
+        return None
+    total = sum(w for _, w in pool)
+    r = random.uniform(0, total)
+    acc = 0.0
+    for p, w in pool:
+        acc += w
+        if r <= acc:
+            return p
+    return pool[-1][0]
+
+
+def build_sectors(con, is_test=False):
+    """转盘扇区：**每个奖品一块 + 「谢谢参与」若干块，全部等分**。
+
+    ⚠️ 扇区大小**不再代表中奖概率** —— 视觉与概率是解耦的：
+    扇区只决定「停下来时指针指向谁」，真实中奖率由 dynamic_win_rate() 算。
+    所以哪怕中奖率只有 2%，扇区也能画得又大又清楚。
+
+    「谢谢参与」和奖品**交替排列**（各占一半），视觉上不会出现
+    「一整块巨大的谢谢参与 + 几个看不清的小米粒」—— 商业转盘的常规做法。
+
+    库存发完的奖品**照旧留在盘上、名字照常显示**，只是不会再被抽中；
+    刻意不给前端任何「已抢完」标记，用户看不出区别。
+    """
+    prizes = list_prizes(con)
+    if not prizes:
+        entries = [_no_win_sector()]
     else:
-        total = sum(s["prob"] for s in win)
-        if total > 100.0:                # 概率之和超过 100：按比例压缩
-            for s in win:
-                s["prob"] = s["prob"] * 100.0 / total
-            total = 100.0
-        sectors = list(win)
-        rem = 100.0 - total
-        if rem > 0.01:
-            sectors.append({"prize_id": None, "name": NO_WIN_NAME, "code": "", "prob": rem,
-                            "is_win": 0, "stock": -1, "used": 0})
+        interleave = len(prizes) <= 6      # 奖品不多就交替排，多了收敛成一块
+        entries = []
+        for p in prizes:
+            entries.append({"prize_id": p["id"], "name": p["name"], "code": p["code"],
+                            "is_win": 1, "stock": p["stock"], "used": p["used"],
+                            "left": p["left"],
+                            "live": bool(is_test or p["stock"] < 0 or p["left"] > 0)})
+            if interleave:
+                entries.append(_no_win_sector())
+        if not interleave:
+            entries.append(_no_win_sector())
 
+    n = len(entries)
+    deg = 360.0 / n
     start = -90.0
-    for s in sectors:
-        s["angle"] = s["prob"] * 3.6
-        s["start"] = start
-        s["end"] = start + s["angle"]
-        start = s["end"]
-    return sectors
+    for e in entries:
+        e["angle"] = deg
+        e["start"] = start
+        e["end"] = start + deg
+        e["prob"] = round(100.0 / n, 4)    # 只表示「视觉占比」，不代表中奖率
+        start += deg
+    return entries
 
 
 def public_sectors(sectors):
@@ -489,28 +571,6 @@ def public_sectors(sectors):
     return [{"prize_id": s.get("prize_id"), "name": s["name"], "prob": s["prob"],
              "is_win": s["is_win"], "angle": s["angle"], "start": s["start"], "end": s["end"]}
             for s in sectors]
-
-
-def pick_sector(sectors):
-    """按概率抽一个扇区。
-
-    预筛掉 `prob <= 0` 的扇区，所以「总库存耗尽」的主奖项**永远不会被抽到**，
-    即使它仍然画在转盘上。抽样池为空时兜底返回未中奖扇区。
-    """
-    pool = [s for s in sectors if float(s.get("prob") or 0) > 0]
-    if not pool:
-        for s in sectors:
-            if not s.get("is_win"):
-                return s
-        return dict(NO_WIN_SECTOR)
-    total = sum(float(s["prob"]) for s in pool)
-    r = random.uniform(0, total)
-    acc = 0.0
-    for s in pool:
-        acc += float(s["prob"])
-        if r <= acc:
-            return s
-    return pool[-1]
 
 
 def record_to_dict(row):
@@ -560,11 +620,13 @@ def stats(con):
         "pending_shipping": pending,
         "undrawn": max(total_users - drawn, 0),
         "per_prize": [{"name": r["n"], "count": r["c"]} for r in per],
-        # 奖品维度：每个奖品的概率 / 库存 / 已发 / 剩余
+        # 奖品维度：每个奖品的库存 / 已发 / 剩余
         "prizes": prizes,
         "prize_count": len(prizes),
         "no_code": sum(1 for p in prizes if not (p["code"] or "").strip()),
-        "prob_sum": round(sum(p["prob"] for p in prizes), 4),
+        # 动态中奖率（剩余礼品 ÷ 剩余人数）—— 会随活动进度自动变化
+        "win_rate": round(dynamic_win_rate(con) * 100.0, 4),
+        "pool_stock": sum(max(0, p["stock"] - p["used"]) for p in prizes if p["stock"] >= 0),
         "whitelist_only": setting(con, "whitelist_only", "1") == "1",
         "title": setting(con, "title", DEFAULT_TITLE),
         "shipping_filled": won - pending,
@@ -816,23 +878,23 @@ class Handler(BaseHTTPRequestHandler):
                 # 不可能被别的请求插进来，所以「某奖品库存 300、同时来 600 个请求」也不会超发。
                 # 测试ID走 is_test=True：不受库存约束，正式奖品抽光了也能继续中奖。
                 sectors = build_sectors(con, is_test=test_user)
-                sec = pick_sector(sectors)
-                idx = sectors.index(sec) if sec in sectors else 0
 
-                # 极端情况二次确认：抽中了就再核对一次这个奖品还剩不剩。
-                # build_sectors 里已判过一次，发奖前再确认一遍，
-                # 保证「同时抽奖」也不会把某个奖品多发出去（正式用户才需要核对）。
-                if sec.get("is_win") and sec.get("prize_id") and not test_user:
-                    stock = to_int(sec.get("stock"), -1)
-                    if stock >= 0 and prize_stock_used(con).get(sec["prize_id"], 0) >= stock:
-                        no_win = next((s for s in sectors if not s.get("is_win")), None)
-                        if no_win is None:
-                            no_win = {"prize_id": None, "name": NO_WIN_NAME, "code": "",
-                                      "prob": 100.0, "is_win": 0, "angle": 360.0,
-                                      "start": -90.0, "end": 270.0, "stock": -1, "used": 0}
-                            sectors = [dict(s) for s in sectors] + [no_win]
-                        sec = no_win
-                        idx = sectors.index(sec)
+                # ---- 中奖判定：动态概率（与扇区大小无关）----
+                # 先按「剩余礼品 ÷ 剩余人数」掷骰子决定中不中，再挑指针停哪个扇区。
+                # 整段在 BEGIN IMMEDIATE + WRITE_LOCK 里，「读剩余量 → 写记录」之间
+                # 不可能被别的请求插进来，所以并发下也不会超发。
+                p_win = dynamic_win_rate(con, is_test=test_user)
+                sec = None
+                if p_win > 0 and random.random() < p_win:
+                    gift = pick_prize(con, is_test=test_user)
+                    if gift:
+                        sec = next((s for s in sectors
+                                    if s.get("is_win") and s.get("prize_id") == gift["id"]), None)
+                if sec is None:
+                    # 没中奖：随机停在某个「谢谢参与」扇区上
+                    blanks = [s for s in sectors if not s.get("is_win")]
+                    sec = random.choice(blanks) if blanks else dict(NO_WIN_SECTOR)
+                idx = sectors.index(sec) if sec in sectors else 0
 
                 prize_name = sec["name"] if sec["is_win"] else NO_WIN_NAME
                 prize_code = (sec.get("code") or "") if sec["is_win"] else ""
@@ -978,13 +1040,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self.csv_response(buf.getvalue(), "users.csv")
 
             if path == "/api/admin/prizes":
-                """奖品列表：每个奖品各自一份 概率 / 库存 / 物料编号。"""
+                """奖品列表 + 当前动态中奖率。"""
                 items = list_prizes(con)
-                prob_sum = round(sum(p["prob"] for p in items), 4)
+                left_stock = sum(max(0, p["stock"] - p["used"]) for p in items if p["stock"] >= 0)
+                users_all = con.execute(
+                    "SELECT COUNT(*) c FROM users WHERE COALESCE(is_test,0)=0").fetchone()["c"]
+                users_drawn = con.execute(
+                    "SELECT COUNT(*) c FROM records WHERE COALESCE(is_test,0)=0").fetchone()["c"]
                 return self.json_ok({
                     "items": items,
-                    "prob_sum": prob_sum,
-                    "no_win_prob": round(max(0.0, 100.0 - prob_sum), 4),
+                    "win_rate": round(dynamic_win_rate(con) * 100.0, 4),
+                    "test_rate": round(dynamic_win_rate(con, is_test=True) * 100.0, 4),
+                    "left_stock": left_stock,
+                    "left_users": left_people_count(con),
+                    "total_users": users_all,
+                    "drawn_users": users_drawn,
                     "no_code": sum(1 for p in items if not (p["code"] or "").strip()),
                 })
 
@@ -1239,10 +1309,8 @@ class Handler(BaseHTTPRequestHandler):
                         "WHERE is_win=1 AND TRIM(COALESCE(prize_code,''))=''"
                     )
                     con.commit()
-                    total = round(sum(c[2] for c in clean), 4)
                     return self.json_ok({"saved": len(clean),
-                                         "prob_sum": total,
-                                         "no_win_prob": round(max(0.0, 100.0 - total), 4),
+                                         "win_rate": round(dynamic_win_rate(con) * 100.0, 4),
                                          "no_code": sum(1 for c in clean if not c[1])})
                 finally:
                     put_db(con)
